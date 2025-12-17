@@ -5,8 +5,9 @@ import { neon } from '@neondatabase/serverless';
  * 
  * Logic:
  * 1. Checks process.env.DATABASE_URL (Standard for Vercel/Production)
- * 2. Attempts to dynamically import ../secrets.ts (Local development fallback)
- * 3. Safely initializes the Neon client only when needed to prevent crashes
+ * 2. Checks import.meta.env.DATABASE_URL (Standard for Vite environments)
+ * 3. Safely attempts to load ../secrets.ts using a "hidden" dynamic import
+ *    to bypass bundler resolution errors during Vercel builds.
  */
 
 let _sql: ReturnType<typeof neon> | null = null;
@@ -15,29 +16,36 @@ let _dbUrl: string | null = null;
 const getSql = async () => {
   if (_sql) return _sql;
 
-  // 1. Try process.env
+  // 1. Try process.env (Vercel/Node environment)
   try {
-    // Note: In Vite/Vercel, process.env.DATABASE_URL is often replaced at build time
-    // or available via import.meta.env.DATABASE_URL
-    if (typeof process !== 'undefined' && process.env.DATABASE_URL) {
+    if (typeof process !== 'undefined' && process.env && process.env.DATABASE_URL) {
       _dbUrl = process.env.DATABASE_URL;
     }
-  } catch (e) {
-    // process might not be defined in all browser environments
-  }
+  } catch (e) {}
 
-  // 2. Try local secrets.ts if env is empty
+  // 2. Try import.meta.env (Vite environment)
   if (!_dbUrl) {
     try {
-      // CRITICAL: Added /* @vite-ignore */ to prevent the build tool from 
-      // trying to resolve this file during the Vercel deployment build.
-      // This solves the "Could not resolve ../secrets.ts" error.
-      const secrets = await import(/* @vite-ignore */ '../secrets.ts');
+      // @ts-ignore
+      if (import.meta && import.meta.env && import.meta.env.DATABASE_URL) {
+        // @ts-ignore
+        _dbUrl = import.meta.env.DATABASE_URL;
+      }
+    } catch (e) {}
+  }
+
+  // 3. Try local secrets.ts if env is empty
+  // We use a Function constructor to hide the import from Vite/Rollup's static analysis.
+  // This prevents the "Could not resolve ../secrets.ts" error during Vercel builds.
+  if (!_dbUrl) {
+    try {
+      const loadSecrets = new Function("return import('../secrets.ts')");
+      const secrets = await loadSecrets();
       if (secrets && secrets.DATABASE_URL) {
         _dbUrl = secrets.DATABASE_URL;
       }
     } catch (e) {
-      // secrets.ts is missing or ignored, which is expected in production/Vercel
+      // secrets.ts is missing or ignored, which is expected in production
     }
   }
 
