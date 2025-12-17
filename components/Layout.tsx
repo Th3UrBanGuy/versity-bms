@@ -4,7 +4,7 @@ import { UserRole } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bus, Calendar, LayoutDashboard, LogOut, 
-  MapPin, Ticket, UserCircle, Menu, X, Bell, CheckCircle, AlertCircle, Info 
+  MapPin, Ticket, UserCircle, Menu, X, Bell, CheckCircle, AlertCircle, Info, Settings2
 } from 'lucide-react';
 
 // Toast Component
@@ -75,9 +75,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
 
   const adminMenu = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'buses', label: 'Fleet Management', icon: Bus },
-    { id: 'destinations', label: 'Destinations', icon: MapPin },
-    { id: 'schedules', label: 'Schedules', icon: Calendar },
+    { id: 'management', label: 'System Management', icon: Settings2 },
   ];
 
   const studentMenu = [
