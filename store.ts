@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { User, Bus, Schedule, Booking, UserRole, Destination } from './types';
 import { db } from './services/db';
@@ -21,7 +20,8 @@ interface AppState {
   
   // Actions
   initData: () => Promise<void>;
-  login: (email: string, role: UserRole) => void;
+  login: (identifier: string, password: string, role: UserRole) => Promise<boolean>;
+  signup: (userData: Omit<User, 'id'> & { password: string }) => Promise<boolean>;
   logout: () => void;
   addBus: (bus: Bus) => Promise<void>;
   addDestination: (dest: Destination) => Promise<void>;
@@ -35,10 +35,7 @@ interface AppState {
 
 export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
-  users: [
-    { id: 'admin1', name: 'System Admin', email: 'admin@bgctub.ac.bd', role: UserRole.ADMIN },
-    { id: 'stu1', name: 'Tanvir Hasan', email: 'student@bgctub.ac.bd', role: UserRole.STUDENT, studentId: 'BGC-2024-001' },
-  ],
+  users: [],
   buses: [],
   destinations: [],
   schedules: [],
@@ -48,19 +45,55 @@ export const useStore = create<AppState>((set, get) => ({
 
   initData: async () => {
     await db.init();
-    const [buses, destinations, schedules, bookings] = await Promise.all([
+    const [users, buses, destinations, schedules, bookings] = await Promise.all([
+      db.getUsers(),
       db.getBuses(),
       db.getDestinations(),
       db.getSchedules(),
       db.getBookings()
     ]);
-    set({ buses, destinations, schedules, bookings, isLoaded: true });
+    set({ users, buses, destinations, schedules, bookings, isLoaded: true });
   },
 
-  login: (email, role) => set((state) => {
-    const user = state.users.find(u => u.email === email && u.role === role);
-    return { currentUser: user || { id: 'new', name: 'Demo User', email, role } };
-  }),
+  login: async (identifier, password, role) => {
+    const { users, addNotification } = get();
+    const user = users.find(u => u.identifier === identifier && u.role === role);
+    
+    if (user && user.password === password) {
+      set({ currentUser: user });
+      addNotification('success', `Welcome back, ${user.name}!`);
+      return true;
+    }
+    
+    addNotification('error', 'Invalid identifier or password');
+    return false;
+  },
+
+  signup: async (userData) => {
+    const { users, addNotification } = get();
+    
+    // Check if identifier already exists
+    if (users.some(u => u.identifier === userData.identifier)) {
+      addNotification('error', 'This identifier is already registered');
+      return false;
+    }
+
+    const newUser: User = {
+      ...userData,
+      id: Math.random().toString(36).substring(7),
+      studentId: userData.role === UserRole.STUDENT ? userData.identifier : undefined
+    };
+
+    try {
+      await db.saveUser(newUser);
+      set((state) => ({ users: [...state.users, newUser], currentUser: newUser }));
+      addNotification('success', 'Account created successfully!');
+      return true;
+    } catch (e) {
+      addNotification('error', 'Failed to create account. Please try again.');
+      return false;
+    }
+  },
 
   logout: () => set({ currentUser: null }),
 

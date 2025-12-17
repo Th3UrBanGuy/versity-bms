@@ -7,7 +7,8 @@ export enum UserRole {
 export interface User {
   id: string;
   name: string;
-  email: string;
+  identifier: string; // This is Student ID for students or Username for admins
+  password?: string;
   role: UserRole;
   studentId?: string;
 }
@@ -32,8 +33,8 @@ export interface Bus {
 export interface Schedule {
   id: string;
   busId: string;
-  originId: string;      // Changed to ID reference
-  destinationId: string; // Changed to ID reference
+  originId: string;
+  destinationId: string;
   departureTime: string;
   type: 'inbound' | 'outbound';
 }

@@ -1,13 +1,21 @@
-
 import { neon } from '@neondatabase/serverless';
+import { DATABASE_URL } from '../secrets';
 
-// The connection string is now retrieved from the environment variable DATABASE_URL
-const sql = neon(process.env.DATABASE_URL!);
+const sql = neon(DATABASE_URL);
 
 export const db = {
-  // Initialize tables if they don't exist
   init: async () => {
     try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          identifier TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          role TEXT NOT NULL,
+          student_id TEXT
+        )
+      `;
       await sql`
         CREATE TABLE IF NOT EXISTS destinations (
           id TEXT PRIMARY KEY,
@@ -52,6 +60,25 @@ export const db = {
     } catch (e) {
       console.error("DB Init Error:", e);
     }
+  },
+
+  // Users CRUD
+  getUsers: async () => {
+    const result = await sql`SELECT * FROM users`;
+    return result.map(r => ({
+      id: r.id,
+      name: r.name,
+      identifier: r.identifier,
+      password: r.password,
+      role: r.role as any,
+      studentId: r.student_id
+    }));
+  },
+  saveUser: async (user: any) => {
+    await sql`
+      INSERT INTO users (id, name, identifier, password, role, student_id)
+      VALUES (${user.id}, ${user.name}, ${user.identifier}, ${user.password}, ${user.role}, ${user.studentId || null})
+    `;
   },
 
   // Destinations CRUD

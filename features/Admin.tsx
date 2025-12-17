@@ -1,15 +1,19 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { Bus, Schedule, Destination } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Plus, Bus as BusIcon, Calendar, User, Phone, Hash, Clock, MapPin, ArrowRight, Search, Loader2, ExternalLink, X, Trash2, Map, CheckCircle2
+  Plus, Bus as BusIcon, Calendar, User, Phone, Hash, Clock, MapPin, ArrowRight, Search, Loader2, ExternalLink, X, Trash2, Map, CheckCircle2, Sparkles, BrainCircuit
 } from 'lucide-react';
-import { searchLocation } from '../services/geminiService';
+import { searchLocation, generateFleetAnalysis } from '../services/geminiService';
 
 export const AdminDashboard = ({ activeTab }: { activeTab: string }) => {
-  const { buses, destinations, schedules, addBus, addDestination, removeDestination, addSchedule, addNotification } = useStore();
+  const { buses, destinations, schedules, bookings, addBus, addDestination, removeDestination, addSchedule, addNotification } = useStore();
+
+  // AI Analysis State
+  const [aiAnalysis, setAiAnalysis] = useState<string>('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Map Search Modal State
   const [showMapSearch, setShowMapSearch] = useState(false);
@@ -110,9 +114,20 @@ export const AdminDashboard = ({ activeTab }: { activeTab: string }) => {
     setNewBus({ plateNumber: '', capacity: 40, driverName: '', driverPhone: '', driverAge: 30, status: 'active' });
   };
 
-  // ----------------------------------------------------------------------
-  // VIEW: FLEET MANAGEMENT
-  // ----------------------------------------------------------------------
+  const runAiAnalysis = async () => {
+    if (buses.length === 0) return;
+    setIsAnalyzing(true);
+    const analysis = await generateFleetAnalysis(buses, schedules, bookings);
+    setAiAnalysis(analysis);
+    setIsAnalyzing(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' && buses.length > 0) {
+      runAiAnalysis();
+    }
+  }, [activeTab]);
+
   if (activeTab === 'buses') {
     return (
       <motion.div variants={fadeIn} initial="hidden" animate="show" className="space-y-8">
@@ -247,9 +262,6 @@ export const AdminDashboard = ({ activeTab }: { activeTab: string }) => {
     );
   }
 
-  // ----------------------------------------------------------------------
-  // VIEW: DESTINATIONS (Live Maps Integration)
-  // ----------------------------------------------------------------------
   if (activeTab === 'destinations') {
     return (
       <motion.div variants={fadeIn} initial="hidden" animate="show" className="space-y-8 pb-20">
@@ -409,7 +421,7 @@ export const AdminDashboard = ({ activeTab }: { activeTab: string }) => {
                             <div className="flex items-center gap-2">
                                <div className="p-2 text-slate-400 hover:text-bgc-600 transition-colors" onClick={(e) => { e.stopPropagation(); window.open(link.uri, '_blank'); }}>
                                   <ExternalLink size={18} />
-                               </div>
+                                </div>
                                <Plus size={20} className="text-bgc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
                           </motion.div>
@@ -426,9 +438,6 @@ export const AdminDashboard = ({ activeTab }: { activeTab: string }) => {
     );
   }
 
-  // ----------------------------------------------------------------------
-  // VIEW: SCHEDULING (Dynamic Selection)
-  // ----------------------------------------------------------------------
   if (activeTab === 'schedules') {
     return (
       <motion.div variants={fadeIn} initial="hidden" animate="show" className="space-y-8 pb-20">
@@ -453,19 +462,13 @@ export const AdminDashboard = ({ activeTab }: { activeTab: string }) => {
                </div>
                <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl">
                   <button 
-                    onClick={() => {
-                      const campus = destinations.find(d => d.name.toLowerCase().includes('campus'));
-                      setNewSchedule({...newSchedule, type: 'inbound', destinationId: campus?.id || ''});
-                    }}
+                    onClick={() => setNewSchedule({...newSchedule, type: 'inbound'})}
                     className={`flex-1 py-3 text-xs font-extrabold rounded-xl transition-all ${newSchedule.type === 'inbound' ? 'bg-white shadow-md text-bgc-700' : 'text-slate-500'}`}
                   >
                     INBOUND TRIP
                   </button>
                   <button 
-                    onClick={() => {
-                      const campus = destinations.find(d => d.name.toLowerCase().includes('campus'));
-                      setNewSchedule({...newSchedule, type: 'outbound', originId: campus?.id || ''});
-                    }}
+                    onClick={() => setNewSchedule({...newSchedule, type: 'outbound'})}
                     className={`flex-1 py-3 text-xs font-extrabold rounded-xl transition-all ${newSchedule.type === 'outbound' ? 'bg-white shadow-md text-bgc-700' : 'text-slate-500'}`}
                   >
                     OUTBOUND TRIP
@@ -606,6 +609,45 @@ export const AdminDashboard = ({ activeTab }: { activeTab: string }) => {
                      </div>
                   </div>
                   <p className="text-sm text-slate-400 font-medium">Published schedules</p>
+              </div>
+           </div>
+
+           {/* AI INSIGHTS SECTION */}
+           <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-2xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-12 text-slate-50 group-hover:text-bgc-50 transition-colors"><BrainCircuit size={150}/></div>
+              <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-8">
+                      <div className="flex items-center gap-3">
+                          <div className="bg-bgc-600 p-3 rounded-2xl text-white shadow-lg shadow-bgc-600/30">
+                              <Sparkles size={24} />
+                          </div>
+                          <h3 className="text-2xl font-black text-slate-900 tracking-tight">Gemini AI Fleet Analysis</h3>
+                      </div>
+                      <button 
+                        onClick={runAiAnalysis}
+                        disabled={isAnalyzing}
+                        className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-bgc-700 transition-all flex items-center gap-2"
+                      >
+                         {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <><BrainCircuit size={18} /> Re-analyze</>}
+                      </button>
+                  </div>
+
+                  <div className="min-h-[120px] bg-slate-50/50 p-8 rounded-3xl border border-slate-200/50 backdrop-blur-sm">
+                      {isAnalyzing ? (
+                        <div className="flex flex-col items-center justify-center py-10 gap-4 text-slate-400">
+                           <Loader2 className="animate-spin" size={40} />
+                           <p className="font-bold text-lg animate-pulse">Consulting Gemini Flash-3...</p>
+                        </div>
+                      ) : aiAnalysis ? (
+                        <div className="prose prose-slate max-w-none">
+                           <p className="text-slate-700 leading-relaxed font-medium text-lg whitespace-pre-line">{aiAnalysis}</p>
+                        </div>
+                      ) : (
+                        <div className="text-center py-10">
+                           <p className="text-slate-400 font-bold">No AI insights generated yet. Click analyze to start.</p>
+                        </div>
+                      )}
+                  </div>
               </div>
            </div>
         </motion.div>
