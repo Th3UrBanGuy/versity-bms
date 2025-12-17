@@ -1,4 +1,3 @@
-
 import { neon } from '@neondatabase/serverless';
 
 /**
@@ -18,6 +17,8 @@ const getSql = async () => {
 
   // 1. Try process.env
   try {
+    // Note: In Vite/Vercel, process.env.DATABASE_URL is often replaced at build time
+    // or available via import.meta.env.DATABASE_URL
     if (typeof process !== 'undefined' && process.env.DATABASE_URL) {
       _dbUrl = process.env.DATABASE_URL;
     }
@@ -28,14 +29,15 @@ const getSql = async () => {
   // 2. Try local secrets.ts if env is empty
   if (!_dbUrl) {
     try {
-      // Dynamic import allows the app to load even if secrets.ts is missing (e.g. on Vercel)
-      // We use a relative path from this file
-      const secrets = await import('../secrets.ts');
+      // CRITICAL: Added /* @vite-ignore */ to prevent the build tool from 
+      // trying to resolve this file during the Vercel deployment build.
+      // This solves the "Could not resolve ../secrets.ts" error.
+      const secrets = await import(/* @vite-ignore */ '../secrets.ts');
       if (secrets && secrets.DATABASE_URL) {
         _dbUrl = secrets.DATABASE_URL;
       }
     } catch (e) {
-      // secrets.ts is missing or ignored, which is expected in production
+      // secrets.ts is missing or ignored, which is expected in production/Vercel
     }
   }
 
@@ -115,7 +117,6 @@ export const db = {
     const sql = await getSql();
     if (!sql) return [];
     try {
-      // Fix: Cast the query result to any[] to ensure map() is available on the returned rows
       const result = (await sql`SELECT * FROM users`) as any[];
       return result.map(r => ({
         id: r.id,
@@ -145,7 +146,6 @@ export const db = {
     const sql = await getSql();
     if (!sql) return [];
     try {
-      // Fix: Cast the query result to any[] to ensure map() is available on the returned rows
       const result = (await sql`SELECT * FROM destinations`) as any[];
       return result.map(r => ({ id: r.id, name: r.name, address: r.address, mapUrl: r.map_url }));
     } catch (e) {
@@ -159,7 +159,7 @@ export const db = {
     await sql`
       INSERT INTO destinations (id, name, address, map_url)
       VALUES (${dest.id}, ${dest.name}, ${dest.address}, ${dest.mapUrl})
-      ON CONFLICT (id) DO UPDATE SET name = ${dest.name}, address = ${dest.address}, map_url = ${dest.mapUrl}
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, address = EXCLUDED.address, map_url = EXCLUDED.map_url
     `;
   },
 
@@ -174,7 +174,6 @@ export const db = {
     const sql = await getSql();
     if (!sql) return [];
     try {
-      // Fix: Cast the query result to any[] to ensure map() is available on the returned rows
       const result = (await sql`SELECT * FROM buses`) as any[];
       return result.map(r => ({ 
         id: r.id, 
@@ -195,7 +194,7 @@ export const db = {
     if (!sql) return;
     await sql`
       INSERT INTO buses (id, plate_number, capacity, driver_name, driver_phone, driver_age, status)
-      VALUES (${bus.id}, ${bus.plate_number || bus.plateNumber}, ${bus.capacity}, ${bus.driverName}, ${bus.driverPhone}, ${bus.driverAge}, ${bus.status})
+      VALUES (${bus.id}, ${bus.plateNumber}, ${bus.capacity}, ${bus.driverName}, ${bus.driverPhone}, ${bus.driverAge}, ${bus.status})
       ON CONFLICT (id) DO UPDATE SET plate_number = EXCLUDED.plate_number, capacity = EXCLUDED.capacity
     `;
   },
@@ -205,7 +204,6 @@ export const db = {
     const sql = await getSql();
     if (!sql) return [];
     try {
-      // Fix: Cast the query result to any[] to ensure map() is available on the returned rows
       const result = (await sql`SELECT * FROM schedules`) as any[];
       return result.map(r => ({
         id: r.id,
@@ -234,7 +232,6 @@ export const db = {
     const sql = await getSql();
     if (!sql) return [];
     try {
-      // Fix: Cast the query result to any[] to ensure map() is available on the returned rows
       const result = (await sql`SELECT * FROM bookings`) as any[];
       return result.map(r => ({
         id: r.id,
