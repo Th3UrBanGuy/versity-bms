@@ -1,0 +1,7 @@
+{
+  "name": "BGC Trust University Bus Manager",
+  "description": "A comprehensive bus management system for BGC Trust University Bangladesh featuring Admin scheduling, Student seat booking, and AI-powered fleet analysis.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
