@@ -1,3 +1,4 @@
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   STUDENT = 'STUDENT',
@@ -18,6 +19,9 @@ export interface Destination {
   name: string;
   address?: string;
   mapUrl?: string;
+  lat?: number;
+  lng?: number;
+  isCampus?: boolean;
 }
 
 export interface Bus {
@@ -30,13 +34,21 @@ export interface Bus {
   status: 'active' | 'maintenance';
 }
 
+export interface RouteStop {
+  id: string;
+  destinationId: string;
+  name: string;
+  arrivalTime: string;
+}
+
 export interface Schedule {
   id: string;
   busId: string;
   originId: string;
   destinationId: string;
   departureTime: string;
-  type: 'inbound' | 'outbound';
+  type: 'inbound' | 'outbound' | 'custom';
+  stops: RouteStop[]; // JSON array of intermediate stops
 }
 
 export interface Booking {
@@ -47,4 +59,5 @@ export interface Booking {
   date: string;
   status: 'confirmed' | 'cancelled';
   timestamp: number;
+  boardingPoint: string; // The name of the stop where student boards
 }

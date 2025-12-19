@@ -3,28 +3,35 @@ import React from 'react';
 import { useStore } from '../store';
 import { Schedule, Booking } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Clock, Calendar, Ticket, ArrowRight, AlertCircle, Bus as BusIcon, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
+import { MapPin, Clock, Calendar, Ticket, ArrowRight, AlertCircle, Bus as BusIcon, Trash2, CheckCircle2, Loader2, Navigation, Circle } from 'lucide-react';
 
 export const StudentDashboard = ({ activeTab }: { activeTab: string }) => {
   const { schedules, buses, destinations, bookings, currentUser, createBooking, cancelBooking, addNotification } = useStore();
   const [isBooking, setIsBooking] = React.useState(false);
+  const [selectedSchedule, setSelectedSchedule] = React.useState<Schedule | null>(null);
+  const [selectedBoardingPoint, setSelectedBoardingPoint] = React.useState<string>('');
 
   const myBookings = bookings.filter(b => b.studentId === currentUser?.id);
 
   const getDestName = (id: string) => destinations.find(d => d.id === id)?.name || 'Unknown';
 
-  const handleBook = async (schedule: Schedule) => {
-    if (isBooking) return;
+  const handleBookClick = (schedule: Schedule) => {
+      // Check if student already booked for this schedule
+      const alreadyBooked = bookings.some(b => b.studentId === currentUser?.id && b.scheduleId === schedule.id && b.status === 'confirmed');
+      if (alreadyBooked) {
+          addNotification('error', 'Reservation already exists for this trip.');
+          return;
+      }
+      setSelectedSchedule(schedule);
+      // Default boarding point is origin
+      setSelectedBoardingPoint(getDestName(schedule.originId));
+  };
 
-    // Check if student already booked for this schedule
-    const alreadyBooked = bookings.some(b => b.studentId === currentUser?.id && b.scheduleId === schedule.id && b.status === 'confirmed');
-    if (alreadyBooked) {
-        addNotification('error', 'Reservation already exists for this trip.');
-        return;
-    }
+  const confirmBooking = async () => {
+    if (!selectedSchedule || isBooking) return;
 
-    const existingBookingsForSchedule = bookings.filter(b => b.scheduleId === schedule.id && b.status === 'confirmed').length;
-    const bus = buses.find(b => b.id === schedule.busId);
+    const existingBookingsForSchedule = bookings.filter(b => b.scheduleId === selectedSchedule.id && b.status === 'confirmed').length;
+    const bus = buses.find(b => b.id === selectedSchedule.busId);
     
     if(bus && existingBookingsForSchedule >= bus.capacity) {
       addNotification('error', 'Bus capacity reached!');
@@ -35,17 +42,19 @@ export const StudentDashboard = ({ activeTab }: { activeTab: string }) => {
     const seatNum = existingBookingsForSchedule + 1;
     const booking: Booking = {
       id: Date.now().toString(),
-      scheduleId: schedule.id,
+      scheduleId: selectedSchedule.id,
       studentId: currentUser!.id,
       seatNumber: seatNum,
       date: new Date().toISOString().split('T')[0],
       status: 'confirmed',
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      boardingPoint: selectedBoardingPoint
     };
 
     try {
       await createBooking(booking);
-      addNotification('success', `Seat #${seatNum} Reserved Successfully!`);
+      addNotification('success', `Seat #${seatNum} Reserved! Boarding at: ${selectedBoardingPoint}`);
+      setSelectedSchedule(null);
     } catch (e) {
       addNotification('error', 'Failed to process booking.');
     } finally {
@@ -94,8 +103,8 @@ export const StudentDashboard = ({ activeTab }: { activeTab: string }) => {
                              <div className="flex items-center gap-2 font-black text-slate-800"><Calendar size={18} className="text-bgc-500" /> {nextTrip.date}</div>
                          </div>
                          <div>
-                             <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Departure</p>
-                             <div className="flex items-center gap-2 font-black text-slate-800"><Clock size={18} className="text-bgc-500" /> {nextTripSchedule.departureTime}</div>
+                             <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Boarding Point</p>
+                             <div className="flex items-center gap-2 font-black text-slate-800"><MapPin size={18} className="text-bgc-500" /> {nextTrip.boardingPoint || 'Origin'}</div>
                          </div>
                          <div>
                              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Seat Assignment</p>
@@ -119,57 +128,114 @@ export const StudentDashboard = ({ activeTab }: { activeTab: string }) => {
     return (
       <div className="space-y-6">
         <h2 className="text-3xl font-black text-slate-900 tracking-tight">Trip Selector</h2>
-        <div className="grid grid-cols-1 gap-4 pb-20">
-          {schedules.map(schedule => {
-            const bus = buses.find(b => b.id === schedule.busId);
-            const bookedCount = bookings.filter(b => b.scheduleId === schedule.id && b.status === 'confirmed').length;
-            const available = (bus?.capacity || 0) - bookedCount;
-            const alreadyBooked = bookings.some(b => b.studentId === currentUser?.id && b.scheduleId === schedule.id && b.status === 'confirmed');
+        
+        {selectedSchedule ? (
+           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-xl max-w-2xl mx-auto">
+              <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                 <Navigation className="text-bgc-600" /> Confirm Boarding Point
+              </h3>
+              <p className="text-slate-500 text-sm font-bold mb-6">Select where you will hop on the bus for the trip from <span className="text-slate-900">{getDestName(selectedSchedule.originId)}</span> to <span className="text-slate-900">{getDestName(selectedSchedule.destinationId)}</span>.</p>
+              
+              <div className="space-y-3 mb-8">
+                 {/* Origin Option */}
+                 <label className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedBoardingPoint === getDestName(selectedSchedule.originId) ? 'border-bgc-500 bg-bgc-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                    <input 
+                      type="radio" 
+                      name="boarding" 
+                      className="hidden" 
+                      checked={selectedBoardingPoint === getDestName(selectedSchedule.originId)}
+                      onChange={() => setSelectedBoardingPoint(getDestName(selectedSchedule.originId))} 
+                    />
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedBoardingPoint === getDestName(selectedSchedule.originId) ? 'border-bgc-500' : 'border-slate-300'}`}>
+                       {selectedBoardingPoint === getDestName(selectedSchedule.originId) && <div className="w-2.5 h-2.5 bg-bgc-500 rounded-full" />}
+                    </div>
+                    <div>
+                       <p className="font-black text-slate-900">{getDestName(selectedSchedule.originId)}</p>
+                       <p className="text-xs text-slate-400 font-bold">Origin • {selectedSchedule.departureTime}</p>
+                    </div>
+                 </label>
 
-            return (
-              <div key={schedule.id} className={`group bg-white p-8 rounded-[2rem] border transition-all ${alreadyBooked ? 'border-bgc-200 bg-bgc-50/20' : 'border-slate-200 shadow-sm hover:shadow-xl'}`}>
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-8">
-                  <div className="flex-1">
-                     <div className="flex items-center gap-2 mb-4">
-                       <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${schedule.type === 'inbound' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
-                         {schedule.type === 'inbound' ? 'To Campus' : 'From Campus'}
-                       </span>
-                       {alreadyBooked && <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-bgc-600 bg-bgc-100 px-3 py-1 rounded-lg"><CheckCircle2 size={12}/> My Ticket</span>}
-                     </div>
-                     <div className="flex items-center gap-3 text-2xl font-black text-slate-900 mb-3 tracking-tighter group-hover:text-bgc-600 transition-colors">
-                        <span>{getDestName(schedule.originId)}</span>
-                        <ArrowRight size={20} className="text-slate-400"/>
-                        <span>{getDestName(schedule.destinationId)}</span>
-                     </div>
-                     <div className="flex items-center gap-6 text-sm text-slate-500 font-bold">
-                       <span className="flex items-center gap-2"><Clock size={16} className="text-bgc-500"/> {schedule.departureTime}</span>
-                       <span className="flex items-center gap-2"><BusIcon size={16} className="text-bgc-500"/> {bus?.plateNumber}</span>
-                     </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-5 min-w-[160px] pl-8 md:border-l border-slate-100">
-                     <div className="text-right">
-                       <span className={`block text-3xl font-black leading-none mb-1 ${available === 0 ? 'text-red-500' : 'text-slate-900'}`}>{available}</span>
-                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seats Left</span>
-                     </div>
-                     <button
-                       onClick={() => handleBook(schedule)}
-                       disabled={available === 0 || alreadyBooked || isBooking}
-                       className="w-full px-6 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-lg hover:bg-bgc-600 active:scale-[0.97] transition-all text-[11px] uppercase tracking-widest disabled:opacity-30"
-                     >
-                       {isBooking ? <Loader2 className="animate-spin mx-auto" size={16} /> : alreadyBooked ? 'Reserved' : available === 0 ? 'Full' : 'Book Seat'}
-                     </button>
+                 {/* Stops Options */}
+                 {(selectedSchedule.stops || []).map((stop) => (
+                    <label key={stop.id} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedBoardingPoint === stop.name ? 'border-bgc-500 bg-bgc-50' : 'border-slate-100 hover:border-slate-200'}`}>
+                       <input 
+                         type="radio" 
+                         name="boarding" 
+                         className="hidden" 
+                         checked={selectedBoardingPoint === stop.name}
+                         onChange={() => setSelectedBoardingPoint(stop.name)} 
+                       />
+                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedBoardingPoint === stop.name ? 'border-bgc-500' : 'border-slate-300'}`}>
+                          {selectedBoardingPoint === stop.name && <div className="w-2.5 h-2.5 bg-bgc-500 rounded-full" />}
+                       </div>
+                       <div>
+                          <p className="font-black text-slate-900">{stop.name}</p>
+                          <p className="text-xs text-slate-400 font-bold">Stop • {stop.arrivalTime}</p>
+                       </div>
+                    </label>
+                 ))}
+              </div>
+
+              <div className="flex gap-4">
+                 <button onClick={() => setSelectedSchedule(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
+                 <button onClick={confirmBooking} disabled={isBooking} className="flex-[2] py-4 bg-bgc-600 text-white font-black rounded-xl hover:bg-bgc-700 transition-colors flex items-center justify-center gap-2">
+                    {isBooking ? <Loader2 className="animate-spin" /> : 'Confirm Ticket'}
+                 </button>
+              </div>
+           </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 pb-20">
+            {schedules.map(schedule => {
+              const bus = buses.find(b => b.id === schedule.busId);
+              const bookedCount = bookings.filter(b => b.scheduleId === schedule.id && b.status === 'confirmed').length;
+              const available = (bus?.capacity || 0) - bookedCount;
+              const alreadyBooked = bookings.some(b => b.studentId === currentUser?.id && b.scheduleId === schedule.id && b.status === 'confirmed');
+
+              return (
+                <div key={schedule.id} className={`group bg-white p-8 rounded-[2rem] border transition-all ${alreadyBooked ? 'border-bgc-200 bg-bgc-50/20' : 'border-slate-200 shadow-sm hover:shadow-xl'}`}>
+                  <div className="flex flex-col md:flex-row justify-between md:items-center gap-8">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${schedule.type === 'inbound' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                          {schedule.type === 'inbound' ? 'To Campus' : 'From Campus'}
+                        </span>
+                        {alreadyBooked && <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-bgc-600 bg-bgc-100 px-3 py-1 rounded-lg"><CheckCircle2 size={12}/> My Ticket</span>}
+                      </div>
+                      <div className="flex items-center gap-3 text-2xl font-black text-slate-900 mb-3 tracking-tighter group-hover:text-bgc-600 transition-colors">
+                          <span>{getDestName(schedule.originId)}</span>
+                          <ArrowRight size={20} className="text-slate-400"/>
+                          <span>{getDestName(schedule.destinationId)}</span>
+                      </div>
+                      <div className="flex items-center gap-6 text-sm text-slate-500 font-bold mb-2">
+                        <span className="flex items-center gap-2"><Clock size={16} className="text-bgc-500"/> {schedule.departureTime}</span>
+                        <span className="flex items-center gap-2"><BusIcon size={16} className="text-bgc-500"/> {bus?.plateNumber}</span>
+                      </div>
+                      {schedule.stops && schedule.stops.length > 0 && (
+                          <div className="flex items-center gap-2 text-xs text-slate-400 font-bold">
+                              <div className="w-2 h-2 rounded-full bg-slate-300" />
+                              <span>Via: {schedule.stops.map(s => s.name).join(', ')}</span>
+                          </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-5 min-w-[160px] pl-8 md:border-l border-slate-100">
+                      <div className="text-right">
+                        <span className={`block text-3xl font-black leading-none mb-1 ${available === 0 ? 'text-red-500' : 'text-slate-900'}`}>{available}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seats Left</span>
+                      </div>
+                      <button
+                        onClick={() => handleBookClick(schedule)}
+                        disabled={available === 0 || alreadyBooked || isBooking}
+                        className="w-full px-6 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-lg hover:bg-bgc-600 active:scale-[0.97] transition-all text-[11px] uppercase tracking-widest disabled:opacity-30"
+                      >
+                        {isBooking ? <Loader2 className="animate-spin mx-auto" size={16} /> : alreadyBooked ? 'Reserved' : available === 0 ? 'Full' : 'Book Seat'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-          {schedules.length === 0 && (
-             <div className="p-20 text-center bg-white border border-dashed border-slate-200 rounded-[3rem]">
-                <BusIcon size={64} className="mx-auto text-slate-200 mb-6" />
-                <p className="text-slate-400 font-black text-lg">No active trip schedules found.</p>
-             </div>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }
@@ -202,9 +268,9 @@ export const StudentDashboard = ({ activeTab }: { activeTab: string }) => {
                                             <span className="font-black text-slate-900">{getDestName(schedule.destinationId)}</span>
                                         </div>
                                         <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                            <span>Seat #{booking.seatNumber}</span>
+                                            <span className="flex items-center gap-1"><MapPin size={10} /> Boarding: {booking.boardingPoint || 'Origin'}</span>
                                             <span>•</span>
-                                            <span>{booking.date}</span>
+                                            <span>Seat #{booking.seatNumber}</span>
                                             <span>•</span>
                                             <span className={`${booking.status === 'confirmed' ? 'text-green-600' : 'text-red-600'}`}>{booking.status}</span>
                                         </div>
